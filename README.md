@@ -255,10 +255,6 @@ var flamingSword = Weapon.CreateWeapon(
 // Enemy weak to fire takes bonus damage
 // See Enemies.cs TakeDamage() method for implementation
 ```
-
-### Achievement System
-Weapon damage calculations can trigger achievement progress when defeating enemies.
-
 ---
 
 ## Technical Details
@@ -309,10 +305,3 @@ Potential additions to the system:
 - Debug testing tools
 
 ---
-
-## License
-Part of the Training project for learning C# game development concepts.
-
-## Author
-Created as part of C# Training exercises (November 2025)
-
