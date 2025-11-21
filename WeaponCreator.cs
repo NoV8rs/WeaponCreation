@@ -129,6 +129,7 @@ namespace WeaponCreation
         /// </summary>
         public void AttackLoop(int loops)
         {
+            // Simulate multiple attacks to see damage distribution and crits
             int howManyAttacks = (int)(AttackSpeedPerSecond);
             int howManyCrits = 0;
             int baseDamage = (int)ActualDamage;
