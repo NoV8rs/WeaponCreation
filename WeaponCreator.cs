@@ -59,8 +59,8 @@ namespace WeaponCreation
 
         public float ActualDamage // Damage after applying Rarity modifier
         {
-            get => BaseDamage * (int)GetModifier(RarityType); // Adjusted to int for clearer scaling
-            set => BaseDamage = value / (int)GetModifier(RarityType); // Reverse calculation to set BaseDamage
+            get => BaseDamage * (int)GetDamageModifier(RarityType); // Adjusted to int for clearer scaling
+            set => BaseDamage = value / (int)GetDamageModifier(RarityType); // Reverse calculation to set BaseDamage
         }
 
         private float MinDamage => ActualDamage * 0.8f;   
@@ -71,19 +71,19 @@ namespace WeaponCreation
         /// </summary>
         /// <param name="rarity">Common - Legendary</param>
         /// <returns></returns>
-        private static float GetModifier(Rarity rarity) => rarity switch
+        private static float GetDamageModifier(Rarity rarity) => rarity switch
         {
-            Rarity.Common => 1.0f,
+            Rarity.Common => 1.0f, 
             Rarity.Uncommon => 1.25f,
             Rarity.Rare => 1.5f,
             Rarity.Epic => 1.75f,
             Rarity.Legendary => 2.0f,
-            _ => 1.0f
+            _ => 1.0f // Default case
         };
 
         public override string ToString()
         {
-            return $"{Name} [{RarityType} {Type}] - Dmg: {ActualDamage} ({MinDamage:F1}-{MaxDamage:F1}) Weight: {Weight} Element: {Element}";
+            return $"{Name} [{RarityType} {Type}] - Dmg: {ActualDamage} ({MinDamage:F1}-{MaxDamage:F1}) Weight: {Weight} Element: {Element} Price: {CalculateSalePrice()}, Sell Price: {CalculateSellPrice()}";
         }
 
         private int CalculateDamage()
@@ -121,6 +121,57 @@ namespace WeaponCreation
         {
             return new Weapon(name, type, rarity, damage, critChance, critMult, weight, element);
         }
+        
+        #region Price Calculation
+        
+        /// <summary>
+        /// Calculates the multiplier based on Rarity.
+        /// Calls in Price Calculation.
+        /// </summary>
+        /// <returns></returns>
+        private int CalculateSaleMultiplierWithRarity()
+        {
+            return RarityType switch
+            {
+                // Change these values to adjust pricing scale
+                // Multiply by base price
+                Rarity.Common => 1,
+                Rarity.Uncommon => 2,
+                Rarity.Rare => 3,
+                Rarity.Epic => 5,
+                Rarity.Legendary => 8,
+                _ => 1
+            };
+        }
+        
+        /// <summary>
+        /// Calculates the Sale Price of the Weapon.
+        /// Formula is Sale Price = (Actual Damage * 10 + Weight * 5) * Rarity Multiplier.
+        /// </summary>
+        /// <returns></returns>
+        private int CalculateSalePrice()
+        {
+            // Base price calculation
+            int basePrice = (int)(ActualDamage * 10 + Weight * 5);
+            // Apply rarity multiplier
+            int rarityMultiplier = CalculateSaleMultiplierWithRarity();
+            return basePrice * rarityMultiplier;
+        }
+        
+        // Sell Price
+        /// <summary>
+        /// Formula is Sell Price = Sale Price * (BasePriceDivide / 2).
+        /// Sale Price is calculated from CalculateSalePrice().
+        /// </summary>
+        /// <returns></returns>
+        private int CalculateSellPrice()
+        {
+            int salePrice = CalculateSalePrice();
+            const float basePriceDivide = 0.15f;
+            return (int)(salePrice * basePriceDivide);
+        }
+        
+        #endregion
 
         #if DEBUG
         /// <summary>
