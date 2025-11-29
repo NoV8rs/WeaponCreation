@@ -1,205 +1,248 @@
-﻿// Should not be dependent on Frameworks or Unity.
+﻿using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Globalization;
+using System.IO;
 
 namespace WeaponCreation
 {
-    /// <summary>
-    /// Weapon Types (Sword, Axe, etc)
-    /// </summary>
-    public enum WeaponType
-    {
-        Sword,
-        Axe,
-        Bow,
-        Staff
-    }
+    // --- ENUMS (Unchanged) ---
+    public enum WeaponType { Sword, Axe, Bow, Staff, Dagger, Hammer }
+    public enum Rarity { Common, Uncommon, Rare, Epic, Legendary }
+    public enum WeaponElement { None, Fire, Ice, Lightning, Earth }
 
-    /// <summary>
-    /// Weapon Rarity Types (Common, Rare, etc)
-    /// </summary>
-    public enum Rarity
+    public class Weapon
     {
-        Common,
-        Uncommon,
-        Rare,
-        Epic,
-        Legendary
-    }
-    
-    /// <summary>
-    /// Weapon Element Types (Fire, Ice, etc)
-    /// </summary>
-    public enum WeaponElement
-    {
-        None,
-        Fire,
-        Ice,
-        Lightning,
-        Earth
-    }
-    
-    public class Weapon(
-        string name,
-        WeaponType type,
-        Rarity rarity,
-        float damage,
-        float criticalChance,
-        float criticalMultiplier,
-        float weight,
-        WeaponElement element = WeaponElement.None)
-    {
-        private string Name { get; } = name;
-        private WeaponType Type { get; } = type;
-        private Rarity RarityType { get; } = rarity;
-        private WeaponElement Element { get; } = element;
-        private float Weight { get; } = weight;
-        public float BaseDamage { get; set; } = damage; // Base damage before rarity modifier
-        public float CriticalChance { get; set; } = criticalChance; // 10% default
-        public float CriticalMultiplier { get; set; } = criticalMultiplier; // 2x damage on crit
-        public float AttackSpeedPerSecond { get; set; } = 1.0f; // 1 attack per second
+        // --- PROPERTIES ---
+        public string Id { get; private set; }
+        public string Name { get; private set; }
+        public WeaponType Type { get; private set; }
+        public Rarity RarityType { get; private set; }
+        public WeaponElement Element { get; private set; }
+        public float Range { get; private set; }
+        public float Weight { get; private set; }
 
-        public float ActualDamage // Damage after applying Rarity modifier
+        // Combat Stats
+        public float BaseDamage { get; set; }
+        public float CriticalChance { get; set; }
+        public float CriticalMultiplier { get; set; }
+        public float AttackSpeedPerSecond { get; set; } = 1.0f;
+
+        public int Level { get; set; } = 1;
+        public float GrowthRatePerLevel { get; set; } = 1.1f; // 10% growth per level set by default
+
+        // --- CALCULATED PROPERTIES ---
+        public float ActualDamage => BaseDamage * GetDamageModifier(RarityType) * GetDamageFromLevel(Level, GrowthRatePerLevel);
+        private float MinDamage => ActualDamage * 0.8f;
+        private float MaxDamage => ActualDamage * 1.2f;
+
+        // --- CONSTRUCTOR ---
+        /// <summary>
+        /// This is a private constructor used internally.
+        /// Use LoadWeaponsFromCsv to create weapons from CSV data.
+        /// </summary>
+        /// <param name="id">Weapon ID</param>
+        /// <param name="name">Name of the Weapon</param>
+        /// <param name="type">Weapon Type (Axes, Swords, Bow)</param>
+        /// <param name="rarity">Weapon Rarity (White, Rare, Legendary)</param>
+        /// <param name="damage">Base Damage of the Weapon</param>
+        /// <param name="range">Not used yet</param>
+        /// <param name="weight">Not used yet</param>
+        /// <param name="critChance">crit change 1.15 = 15% chance</param>
+        /// <param name="critMult">Base Damage mult from this value (Base Damage[20] x critMult[1.5] = 30 damage)</param>
+        /// <param name="element">Element type of Weapon (Fire, Shock, Dark)</param>
+        /// <param name="growthPerLevel">Value for damage scaling with level of the weapon (Level 1 Weapon damage is 20, growthPerLevel is 1.5, then the level 2 Weapon damage is 30)</param>
+        /// <param name="level">Level of the Weapon</param>
+        private Weapon(string id, string name, WeaponType type, Rarity rarity, float damage, float range, float weight, float critChance, float critMult, WeaponElement element, float growthPerLevel, int level)
         {
-            get => BaseDamage * (int)GetDamageModifier(RarityType); // Adjusted to int for clearer scaling
-            set => BaseDamage = value / (int)GetDamageModifier(RarityType); // Reverse calculation to set BaseDamage
+            Id = id;
+            Name = name;
+            Type = type;
+            RarityType = rarity;
+            BaseDamage = damage;
+            Range = range;
+            Weight = weight;
+            CriticalChance = critChance;
+            CriticalMultiplier = critMult;
+            Element = element;
+            Level = level;
+            GrowthRatePerLevel = growthPerLevel;
         }
 
-        private float MinDamage => ActualDamage * 0.8f;   
-        private float MaxDamage => ActualDamage * 1.2f; 
-
+        // --- CSV LOADER (Main Creation Method) ---
         /// <summary>
-        /// Modifier for Damage based on Rarity
+        /// This loads weapons from a CSV file.
+        /// Great for bulk creation and balancing.
         /// </summary>
-        /// <param name="rarity">Common - Legendary</param>
+        /// <param name="path">A path to the weapon.csv location.</param>
+        /// <returns>List of Weapons.</returns>
+        public static List<Weapon> LoadWeaponsFromCsv(string path = "weapons.csv")
+        {
+            var weaponList = new List<Weapon>();
+            string fullPath = Path.GetFullPath(path);
+
+            Console.WriteLine($"[System] Loading Weapons from: {fullPath}...");
+
+            if (!File.Exists(path))
+            {
+                Console.WriteLine($"[Error] File not found at {fullPath}");
+                return weaponList;
+            }
+
+            string[] lines = File.ReadAllLines(path);
+
+            // Loop starts at 1 to skip the header row
+            for (int i = 1; i < lines.Length; i++)
+            {
+                string line = lines[i];
+                if (string.IsNullOrWhiteSpace(line)) continue;
+
+                string[] data = line.Split(',');
+                
+                if (data.Length < 12)
+                {
+                    Console.WriteLine($"[Warning] Skipping invalid row {i} (Not enough columns): {line}");
+                    continue;
+                }
+
+                try
+                {
+                    Weapon newWeapon = new Weapon(
+                        id:             data[0].Trim(),
+                        name:           data[1].Trim(),
+                        type:           ParseEnum<WeaponType>(data[2]),
+                        rarity:         ParseEnum<Rarity>(data[3]),
+                        damage:         ParseFloat(data[4]),
+                        range:          ParseFloat(data[5]),
+                        weight:         ParseFloat(data[6]),
+                        critChance:     ParseFloat(data[7]),
+                        critMult:       ParseFloat(data[8]),
+                        element:        ParseEnum<WeaponElement>(data[9]),
+                        growthPerLevel: ParseFloat(data[10]),
+                        level:          ParseInt(data[11])
+                    );
+                    weaponList.Add(newWeapon);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[Error] Failed to parse row {i}: {ex.Message}");
+                }
+            }
+
+            Console.WriteLine($"[System] Successfully loaded {weaponList.Count} weapons.");
+            return weaponList;
+        }
+        
+        /// <summary>
+        /// This creates a copy of the weapon at a specific level.
+        /// Great for scaling enemies or loot drops.
+        /// </summary>
+        /// <param name="targetLevel"></param>
         /// <returns></returns>
+        public Weapon CreateCopyAtLevel(int targetLevel)
+        {
+            return new Weapon(
+                this.Id,
+                this.Name,
+                this.Type,
+                this.RarityType,
+                this.BaseDamage,
+                this.Range,
+                this.Weight,
+                this.CriticalChance,
+                this.CriticalMultiplier,
+                this.Element,
+                this.GrowthRatePerLevel,
+                targetLevel
+            );
+        }
+
+        // --- LOGIC METHODS ---
+
         private static float GetDamageModifier(Rarity rarity) => rarity switch
         {
-            Rarity.Common => 1.0f, 
+            Rarity.Common => 1.0f,
             Rarity.Uncommon => 1.25f,
             Rarity.Rare => 1.5f,
             Rarity.Epic => 1.75f,
             Rarity.Legendary => 2.0f,
-            _ => 1.0f // Default case
+            _ => 1.0f
+        };
+        
+        private static float GetDamageFromLevel(int level, float growthRate) => (float)Math.Pow(growthRate, level - 1);
+
+        private int CalculateSaleMultiplierWithRarity() => RarityType switch
+        {
+            Rarity.Common => 1,
+            Rarity.Uncommon => 2,
+            Rarity.Rare => 3,
+            Rarity.Epic => 5,
+            Rarity.Legendary => 8,
+            _ => 1
         };
 
-        public override string ToString()
+        public int CalculateSalePrice()
         {
-            return $"{Name} [{RarityType} {Type}] - Dmg: {ActualDamage} ({MinDamage:F1}-{MaxDamage:F1}) Weight: {Weight} Element: {Element} Price: {CalculateSalePrice()}, Sell Price: {CalculateSellPrice()}";
+            int basePrice = (int)(ActualDamage * 10 + Weight * 5);
+            return basePrice * CalculateSaleMultiplierWithRarity();
         }
 
+        public int CalculateSellPrice()
+        {
+            return (int)(CalculateSalePrice() * 0.15f);
+        }
+
+        // Combat Logic
         private int CalculateDamage()
         {
-            int damage = RollDamage();
-            if (IsCriticalHit())
+            int damage = Random.Shared.Next((int)MinDamage, (int)MaxDamage + 1);
+            if (Random.Shared.NextDouble() < CriticalChance)
             {
                 damage = (int)(damage * CriticalMultiplier);
             }
             return damage;
         }
         
-        private int RollDamage()
+        // --- Helpers ---
+        private static float ParseFloat(string value)
         {
-            return Random.Shared.Next((int)MinDamage, (int)MaxDamage + 1);
+            // Tries to parse. If it fails (bad text), returns 0.0f
+            if (float.TryParse(value.Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out float result))
+                return result;
+            return 0.0f; 
         }
-        
-        private bool IsCriticalHit()
+
+        private static int ParseInt(string value)
         {
-            return Random.Shared.NextDouble() < CriticalChance;
+            if (int.TryParse(value.Trim(), out int result))
+                return result;
+            return 1; // Default level 1 if parsing fails
         }
-        
-        /// <summary>
-        /// Create Weapon - Static Factory Method
-        /// </summary>
-        /// <param name="name">Name of the Weapon.</param>
-        /// <param name="type">Weapon Type (Bow, Staff...)</param>
-        /// <param name="rarity">Common - Legendary.</param>
-        /// <param name="damage">Damage of the Weapon.</param>
-        /// <param name="weight">Weight of the Weapon.</param>
-        /// <param name="element">Element Type, Default is None.</param>
-        /// <returns></returns>
-        public static Weapon CreateWeapon(string name, WeaponType type, Rarity rarity, float damage, float critChance, float critMult, float weight,
-            WeaponElement element = WeaponElement.None)
+
+        private static T ParseEnum<T>(string value) where T : struct
         {
-            return new Weapon(name, type, rarity, damage, critChance, critMult, weight, element);
+            if (Enum.TryParse<T>(value.Trim(), true, out T result))
+                return result;
+            return default(T); // Returns first enum item (e.g. Sword or Common) if fails
         }
-        
-        #region Price Calculation
-        
-        /// <summary>
-        /// Calculates the multiplier based on Rarity.
-        /// Calls in Price Calculation.
-        /// </summary>
-        /// <returns></returns>
-        private int CalculateSaleMultiplierWithRarity()
+
+        public override string ToString()
         {
-            return RarityType switch
-            {
-                // Change these values to adjust pricing scale
-                // Multiply by base price
-                Rarity.Common => 1,
-                Rarity.Uncommon => 2,
-                Rarity.Rare => 3,
-                Rarity.Epic => 5,
-                Rarity.Legendary => 8,
-                _ => 1
-            };
+            return $"[{Id}] {Name} {Level} ({RarityType} {Type}) | DMG: {ActualDamage:F0} | ELM: {Element} | VAL: {CalculateSalePrice()}g";
         }
-        
-        /// <summary>
-        /// Calculates the Sale Price of the Weapon.
-        /// Formula is Sale Price = (Actual Damage * 10 + Weight * 5) * Rarity Multiplier.
-        /// </summary>
-        /// <returns></returns>
-        private int CalculateSalePrice()
-        {
-            // Base price calculation
-            int basePrice = (int)(ActualDamage * 10 + Weight * 5);
-            // Apply rarity multiplier
-            int rarityMultiplier = CalculateSaleMultiplierWithRarity();
-            return basePrice * rarityMultiplier;
-        }
-        
-        // Sell Price
-        /// <summary>
-        /// Formula is Sell Price = Sale Price * (BasePriceDivide / 2).
-        /// Sale Price is calculated from CalculateSalePrice().
-        /// </summary>
-        /// <returns></returns>
-        private int CalculateSellPrice()
-        {
-            int salePrice = CalculateSalePrice();
-            const float basePriceDivide = 0.15f;
-            return (int)(salePrice * basePriceDivide);
-        }
-        
-        #endregion
 
         #if DEBUG
-        /// <summary>
-        /// Debug method to simulate multiple attacks.
-        /// 
-        /// </summary>
         public void AttackLoop(int loops)
         {
-            // Simulate multiple attacks to see damage distribution and crits
-            int howManyAttacks = (int)(AttackSpeedPerSecond);
-            int howManyCrits = 0;
-            int baseDamage = (int)ActualDamage;
-            int minDamage = (int)MinDamage;
-            int maxDamage = (int)MaxDamage;
-            int highestPossibleDamage = (int)(MaxDamage * CriticalMultiplier);
-            
-            for (var i = 0; i < loops; i++)
+            Console.WriteLine($"--- Simulating {loops} attacks for {Name} ---");
+            int crits = 0;
+            for (int i = 0; i < loops; i++)
             {
-                int damage = CalculateDamage();
-                for (var j = 0; j < howManyAttacks; j++)
-                {
-                    if (IsCriticalHit()) howManyCrits++;
-                }
-                Console.WriteLine($"Calculated Damage: {damage}, Attack #{i + 1}, Critical: {(damage > MaxDamage ? "Yes" : "No")}");
+                int dmg = CalculateDamage();
+                // Check if damage exceeds max base damage (indicates a crit)
+                if (dmg > MaxDamage) crits++;
             }
-            Console.WriteLine(howManyCrits + " Critical Hits landed out of " + (loops * howManyAttacks) + " attacks.");
-            Console.WriteLine(baseDamage + " Base Damage, Min Damage: " + minDamage + ", Max Damage: " + maxDamage);
-            Console.WriteLine("Highest Possible Damage (Max * Crit Mult): " + highestPossibleDamage);
+            Console.WriteLine($"Results: {loops} Hits. {crits} Crits. Est. Value: {CalculateSalePrice()}");
         }
         #endif
     }
