@@ -14,17 +14,27 @@ public class WeaponPrefixStats
         PercentageAdd,
         Multiplier
     }
-
+    
+    /// <summary>
+    /// Stat types that can be modified by weapon prefixes.
+    /// </summary>
     public enum StatType
     {
         MaxHealth,
         AttackDamage,
     }
     
+    // Properties
     public StatType statType { get; set; }
     public ModifierType modifierType { get; set; }
     public float value { get; set; }
     
+    /// <summary>
+    /// Weapon Prefix Stats Constructor
+    /// </summary>
+    /// <param name="statType">Type of stats that can be on the Weapon.</param>
+    /// <param name="modifierType">Percent, Add, and Mult.</param>
+    /// <param name="value">The value for the increases by the modifier.</param>
     public WeaponPrefixStats(StatType statType, ModifierType modifierType, float value)
     {
         this.statType = statType;
@@ -37,6 +47,10 @@ public class WeaponPrefixStats
         }
     }
     
+    /// <summary>
+    /// Prints the modifier in a rounded format for display.
+    /// </summary>
+    /// <returns></returns>
     public override string ToString()
     {
         // Rounded to the nearest tenth for display
