@@ -15,6 +15,7 @@ namespace WeaponCreation
         public string Id { get; private set; }
         // Name of the Weapon
         public string Name { get; private set; }
+        private string _originalName => Name; // For reference if needed
         // Type of the Weapon
         public WeaponType Type { get; private set; }
         // Rarity of the Weapon
@@ -41,14 +42,20 @@ namespace WeaponCreation
         
         // Growth rate for damage scaling per level
         public float GrowthRatePerLevel { get; set; } = 1.1f;
+        
+        // Cached the Damage after calculations
+        private float _cachedDamage = -1f;
 
         // Actual Damage is the damage after applying rarity and level scaling.
         public float ActualDamage
         {
             get
             {
-                float scaledDamage = BaseDamage * GetDamageModifier(RarityType) * GetDamageFromLevel(Level, GrowthRatePerLevel);
-                return scaledDamage;
+                if (_cachedDamage < 0)
+                {
+                    _cachedDamage = BaseDamage * GetDamageModifier(RarityType) * GetDamageFromLevel(Level, GrowthRatePerLevel);
+                }
+                return _cachedDamage;
             }
         }
         
@@ -319,6 +326,81 @@ namespace WeaponCreation
             if (BonusStats.Count == 0) return "";
             return " | Bonus: " + string.Join(", ", BonusStats);
         }
+        
+        /// <summary>
+        /// Gives the weapon a name based on its prefixes.
+        /// </summary>
+        private void UpdateNameWithPrefixes()
+        {
+            // 1. Reset name to original so we don't get "Sharp Sharp Sword"
+            string prefix = "";
+    
+            // 2. Loop through stats to find a suitable prefix
+            // For simplicity, we just take the prefix of the LAST added stat, 
+            // but you could prioritize Rarity or specific stats.
+            if (BonusStats.Count > 0)
+            {
+                // Get the last stat added (or search for the highest value)
+                var dominantStat = BonusStats.Last(); 
+        
+                prefix = GetAdjectiveForStat(dominantStat);
+            }
+
+            // 3. Combine them
+            if (!string.IsNullOrEmpty(prefix))
+            {
+                Name = $"{prefix} {_originalName}";
+            }
+            else
+            {
+                Name = _originalName;
+            }
+        }
+        
+        /// <summary>
+        /// IF you want to combine multiple prefixes into the name.
+        /// E.g., "Sharp Vital Sword" for +Damage and +Health.
+        /// </summary>
+        /// <returns></returns>
+        //private void UpdateNameWithPrefixes()
+        //{
+        //    StringBuilder fullPrefix = new StringBuilder();
+
+        //    foreach (var stat in BonusStats)
+        //    {
+        //        fullPrefix.Append(GetAdjectiveForStat(stat) + " ");
+        //    }
+
+        //    // TrimEnd removes the trailing space
+        //    Name = $"{fullPrefix.ToString().TrimEnd()} {_originalName}";
+        //}
+
+        /// <summary>
+        /// Get the adjective based on the stat type and modifier.
+        /// </summary>
+        /// <param name="stat">Gets the stat for the adjective name for the weapon.</param>
+        /// <returns></returns>
+        private string GetAdjectiveForStat(WeaponPrefixStats stat)
+        {
+            return stat.statType switch
+            {
+                WeaponPrefixStats.StatType.AttackDamage => stat.modifierType switch 
+                {
+                    WeaponPrefixStats.ModifierType.Multiplier => "Deadly",
+                    WeaponPrefixStats.ModifierType.PercentageAdd => "Jagged",
+                    _ => "Sharp" // Flat damage
+                },
+        
+                WeaponPrefixStats.StatType.MaxHealth => stat.modifierType switch
+                {
+                    WeaponPrefixStats.ModifierType.Multiplier => "Immortal",
+                    WeaponPrefixStats.ModifierType.PercentageAdd => "Vital",
+                    _ => "Sturdy"
+                },
+        
+                _ => "Enchanted" // Fallback
+            };
+        }
         #endregion
         
         #if DEBUG
@@ -366,6 +448,8 @@ namespace WeaponCreation
             {
                 weapon.BonusStats.Add(GenerateRandomStat());
             }
+            
+            weapon.UpdateNameWithPrefixes();
         }
         
         /// <summary>
@@ -390,7 +474,7 @@ namespace WeaponCreation
             if (modType == WeaponPrefixStats.ModifierType.Flat)
             {
                 if (statType == WeaponPrefixStats.StatType.MaxHealth) flatValue = _rng.Next(10, 50); // +10 to +50 HP
-                if (statType == WeaponPrefixStats.StatType.AttackDamage) flatValue = _rng.Next(20, 20); // +2 to +10 DMG
+                else if (statType == WeaponPrefixStats.StatType.AttackDamage) flatValue = _rng.Next(20, 20); // +2 to +10 DMG
             }
             else if (modType == WeaponPrefixStats.ModifierType.PercentageAdd)
             {
