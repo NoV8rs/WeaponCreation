@@ -46,12 +46,21 @@ public class Inventory
         Console.WriteLine($"[Inventory] You equipped: {EquippedWeapon.Name}");
     }
     
+    public void UnequipWeapon() 
+    {
+        if (EquippedWeapon != null)
+        {
+            Console.WriteLine($"[Inventory] You unequipped: {EquippedWeapon.Name}");
+            EquippedWeapon = null;
+        }
+    }
+    
     public void DisplayInventory()
     {
         Console.WriteLine("Inventory:");
         foreach (var weapon in _slots)
         {
-            Console.WriteLine($"- {weapon.Name}, Level: {weapon.Level} (Damage: {weapon.ActualDamage}, Element: {weapon.Element})");
+            Console.WriteLine($"- {weapon.Name}, Rarity: {weapon.RarityType}, Level: {weapon.Level} (Damage: {weapon.ActualDamage}, Element: {weapon.Element}), {weapon.GetBonusStatsString()}");
         }
     }
     

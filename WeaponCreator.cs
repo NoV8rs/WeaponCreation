@@ -19,6 +19,8 @@ namespace WeaponCreation
         public WeaponType Type { get; private set; }
         public Rarity RarityType { get; private set; }
         public WeaponElement Element { get; private set; }
+        
+        public List<WeaponDropStats> BonusStats { get; private set; } = new List<WeaponDropStats>();
         public float Range { get; private set; }
         public float Weight { get; private set; }
 
@@ -141,20 +143,15 @@ namespace WeaponCreation
         /// <returns></returns>
         public Weapon CreateCopyAtLevel(int targetLevel)
         {
-            return new Weapon(
-                this.Id,
-                this.Name,
-                this.Type,
-                this.RarityType,
-                this.BaseDamage,
-                this.Range,
-                this.Weight,
-                this.CriticalChance,
-                this.CriticalMultiplier,
-                this.Element,
-                this.GrowthRatePerLevel,
-                targetLevel
+            var newWeapon = new Weapon(
+                this.Id, this.Name, this.Type, this.RarityType, this.BaseDamage,
+                this.Range, this.Weight, this.CriticalChance, this.CriticalMultiplier,
+                this.Element, this.GrowthRatePerLevel, targetLevel
             );
+
+            // Initialize the list
+            newWeapon.BonusStats = new List<WeaponDropStats>();
+            return newWeapon;
         }
 
         // --- LOGIC METHODS ---
@@ -203,6 +200,33 @@ namespace WeaponCreation
             return damage;
         }
         
+        public float CalculateBonusStat(WeaponDropStats.StatType statToCalc, float playerBaseValue)
+        {
+            float flatSum = 0;
+            float percentSum = 0;
+            float multiplierProduct = 1;
+
+            // Find only modifiers that affect the requested stat (e.g., MaxHealth)
+            foreach (var mod in BonusStats.Where(m => m.statType == statToCalc))
+            {
+                switch (mod.modifierType)
+                {
+                    case WeaponDropStats.ModifierType.Flat:
+                        flatSum += mod.value;
+                        break;
+                    case WeaponDropStats.ModifierType.PercentageAdd:
+                        percentSum += mod.value;
+                        break;
+                    case WeaponDropStats.ModifierType.Multiplier:
+                        multiplierProduct *= mod.value;
+                        break;
+                }
+            }
+
+            // Formula: (Base + Flat) * (1 + Sum%) * (ProductX)
+            return (playerBaseValue + flatSum) * (1.0f + percentSum) * multiplierProduct;
+        }
+        
         // --- Helpers ---
         private static float ParseFloat(string value)
         {
@@ -230,6 +254,12 @@ namespace WeaponCreation
         {
             return $"[{Id}] {Name} {Level} ({RarityType} {Type}) | DMG: {ActualDamage:F0} | ELM: {Element} | VAL: {CalculateSalePrice()}g";
         }
+        
+        public string GetBonusStatsString()
+        {
+            if (BonusStats.Count == 0) return "";
+            return " | Bonus: " + string.Join(", ", BonusStats);
+        }
 
         #if DEBUG
         public void AttackLoop(int loops)
@@ -244,6 +274,62 @@ namespace WeaponCreation
             }
             Console.WriteLine($"Results: {loops} Hits. {crits} Crits. Est. Value: {CalculateSalePrice()}");
         }
+        
+        #region Stat Rolling for Weapons (Debug Only)
+        private static Random _rng = new Random();
+
+        // Rolls random stats for a weapon based on its rarity
+        // Going to change... this to a more robust system later.
+        public static void RollStatsForWeapon(Weapon weapon)
+        {
+            // Determine how many stats based on Rarity?
+            int rollCount = weapon.RarityType switch
+            {
+                Rarity.Common => 0,
+                Rarity.Uncommon => 1,
+                Rarity.Rare => 2,
+                Rarity.Epic => 3,
+                Rarity.Legendary => 10,
+                _ => 0
+            };
+
+            for (int i = 0; i < rollCount; i++)
+            {
+                weapon.BonusStats.Add(GenerateRandomStat());
+            }
+        }
+
+        // Going to change this to a more robust system later.
+        private static WeaponDropStats GenerateRandomStat()
+        {
+            // Pick Random Stat (Health or Damage)
+            var stats = Enum.GetValues<WeaponDropStats.StatType>();
+            var statType = stats[_rng.Next(stats.Length)];
+
+            // Pick Random Modifier (Flat, %, etc)
+            var mods = Enum.GetValues<WeaponDropStats.ModifierType>();
+            var modType = mods[_rng.Next(mods.Length)];
+
+            float value = 0f;
+            
+            if (modType == WeaponDropStats.ModifierType.Flat)
+            {
+                if (statType == WeaponDropStats.StatType.MaxHealth) value = _rng.Next(10, 50); // +10 to +50 HP
+                else value = _rng.Next(2, 10); // +2 to +10 Dmg
+            }
+            else if (modType == WeaponDropStats.ModifierType.PercentageAdd)
+            {
+                value = (float)_rng.NextDouble() * 0.2f; // 0% to 20%
+
+            }
+            else // Multiplier
+            {
+                value = 1.0f + ((float)_rng.NextDouble() * 0.5f); // 1.0x to 1.5x
+            }
+
+            return new WeaponDropStats(statType, modType, value);
+        }
+        #endregion
         #endif
     }
 }
