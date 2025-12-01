@@ -1,12 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Globalization;
-using System.IO;
+﻿using System.Globalization;
 
 namespace WeaponCreation
 {
-    // --- ENUMS (Unchanged) ---
+    // --- ENUMS ---
     public enum WeaponType { Sword, Axe, Bow, Staff, Dagger, Hammer }
     public enum Rarity { Common, Uncommon, Rare, Epic, Legendary }
     public enum WeaponElement { None, Fire, Ice, Lightning, Earth }
@@ -14,29 +10,52 @@ namespace WeaponCreation
     public class Weapon
     {
         // --- PROPERTIES ---
+        #region Properties
+        // Unique Identifier for the Weapon
         public string Id { get; private set; }
+        // Name of the Weapon
         public string Name { get; private set; }
+        // Type of the Weapon
         public WeaponType Type { get; private set; }
+        // Rarity of the Weapon
         public Rarity RarityType { get; private set; }
+        // Elemental Type of the Weapon
         public WeaponElement Element { get; private set; }
         
-        public List<WeaponDropStats> BonusStats { get; private set; } = new List<WeaponDropStats>();
-        public float Range { get; private set; }
-        public float Weight { get; private set; }
+        // List of all the bonus stats applied to the weapon
+        public List<WeaponPrefixStats> BonusStats { get; private set; } = new List<WeaponPrefixStats>();
+        public float Range { get; private set; } // Might Remove later
+        public float Weight { get; private set; } // Might Remove later
 
-        // Combat Stats
+        // Base Damage before modifiers or scaling
         public float BaseDamage { get; set; }
+        // Critical Chance (e.g., 0.15 = 15% chance)
         public float CriticalChance { get; set; }
+        // Critical Multiplier (e.g., 1.5 = 50% more damage on crit)
         public float CriticalMultiplier { get; set; }
+        // Attack Speed (Attacks per Second)
         public float AttackSpeedPerSecond { get; set; } = 1.0f;
 
+        // Level of the Weapon.
         public int Level { get; set; } = 1;
-        public float GrowthRatePerLevel { get; set; } = 1.1f; // 10% growth per level set by default
+        
+        // Growth rate for damage scaling per level
+        public float GrowthRatePerLevel { get; set; } = 1.1f;
 
-        // --- CALCULATED PROPERTIES ---
-        public float ActualDamage => BaseDamage * GetDamageModifier(RarityType) * GetDamageFromLevel(Level, GrowthRatePerLevel);
+        // Actual Damage is the damage after applying rarity and level scaling.
+        public float ActualDamage
+        {
+            get
+            {
+                float scaledDamage = BaseDamage * GetDamageModifier(RarityType) * GetDamageFromLevel(Level, GrowthRatePerLevel);
+                return scaledDamage;
+            }
+        }
+        
+        // Damage Range for variability in attacks
         private float MinDamage => ActualDamage * 0.8f;
         private float MaxDamage => ActualDamage * 1.2f;
+        #endregion
 
         // --- CONSTRUCTOR ---
         /// <summary>
@@ -80,7 +99,9 @@ namespace WeaponCreation
         /// <returns>List of Weapons.</returns>
         public static List<Weapon> LoadWeaponsFromCsv(string path = "weapons.csv")
         {
+            // Initialize the list to hold weapons, then adds them from CSV
             var weaponList = new List<Weapon>();
+            // Get the full path for logging
             string fullPath = Path.GetFullPath(path);
 
             Console.WriteLine($"[System] Loading Weapons from: {fullPath}...");
@@ -91,17 +112,21 @@ namespace WeaponCreation
                 return weaponList;
             }
 
+            // Read all lines from the CSV
             string[] lines = File.ReadAllLines(path);
 
             // Loop starts at 1 to skip the header row
             for (int i = 1; i < lines.Length; i++)
             {
+                // Handles empty lines.
                 string line = lines[i];
                 if (string.IsNullOrWhiteSpace(line)) continue;
 
+                // Split CSV line into columns
                 string[] data = line.Split(',');
                 
-                if (data.Length < 12)
+                // Basic validation
+                if (data.Length < 12) // Expecting at least 12 columns
                 {
                     Console.WriteLine($"[Warning] Skipping invalid row {i} (Not enough columns): {line}");
                     continue;
@@ -109,6 +134,7 @@ namespace WeaponCreation
 
                 try
                 {
+                    // See the weapons.csv for the order of these parameters
                     Weapon newWeapon = new Weapon(
                         id:             data[0].Trim(),
                         name:           data[1].Trim(),
@@ -123,7 +149,7 @@ namespace WeaponCreation
                         growthPerLevel: ParseFloat(data[10]),
                         level:          ParseInt(data[11])
                     );
-                    weaponList.Add(newWeapon);
+                    weaponList.Add(newWeapon); // Add to the list
                 }
                 catch (Exception ex)
                 {
@@ -139,8 +165,8 @@ namespace WeaponCreation
         /// This creates a copy of the weapon at a specific level.
         /// Great for scaling enemies or loot drops.
         /// </summary>
-        /// <param name="targetLevel"></param>
-        /// <returns></returns>
+        /// <param name="targetLevel">What should the Weapon Level be.</param>
+        /// <returns>New Weapons.</returns>
         public Weapon CreateCopyAtLevel(int targetLevel)
         {
             var newWeapon = new Weapon(
@@ -150,12 +176,12 @@ namespace WeaponCreation
             );
 
             // Initialize the list
-            newWeapon.BonusStats = new List<WeaponDropStats>();
+            newWeapon.BonusStats = new List<WeaponPrefixStats>();
             return newWeapon;
         }
 
-        // --- LOGIC METHODS ---
-
+        // --- CALCULATION METHODS ---
+        #region Calculations
         private static float GetDamageModifier(Rarity rarity) => rarity switch
         {
             Rarity.Common => 1.0f,
@@ -166,7 +192,13 @@ namespace WeaponCreation
             _ => 1.0f
         };
         
-        private static float GetDamageFromLevel(int level, float growthRate) => (float)Math.Pow(growthRate, level - 1);
+        private static float GetDamageFromLevel(int level, float growthRate)
+        {
+            if (level <= 1 || growthRate <= 0)
+                return 1f; // Level 1 (or invalid growth) should return base damage only
+
+            return (float)Math.Pow(growthRate, level - 1);
+        }
 
         private int CalculateSaleMultiplierWithRarity() => RarityType switch
         {
@@ -200,7 +232,7 @@ namespace WeaponCreation
             return damage;
         }
         
-        public float CalculateBonusStat(WeaponDropStats.StatType statToCalc, float playerBaseValue)
+        public float CalculateBonusStat(WeaponPrefixStats.StatType statToCalc, float playerBaseValue)
         {
             float flatSum = 0;
             float percentSum = 0;
@@ -211,13 +243,13 @@ namespace WeaponCreation
             {
                 switch (mod.modifierType)
                 {
-                    case WeaponDropStats.ModifierType.Flat:
+                    case WeaponPrefixStats.ModifierType.Flat:
                         flatSum += mod.value;
                         break;
-                    case WeaponDropStats.ModifierType.PercentageAdd:
+                    case WeaponPrefixStats.ModifierType.PercentageAdd:
                         percentSum += mod.value;
                         break;
-                    case WeaponDropStats.ModifierType.Multiplier:
+                    case WeaponPrefixStats.ModifierType.Multiplier:
                         multiplierProduct *= mod.value;
                         break;
                 }
@@ -226,8 +258,16 @@ namespace WeaponCreation
             // Formula: (Base + Flat) * (1 + Sum%) * (ProductX)
             return (playerBaseValue + flatSum) * (1.0f + percentSum) * multiplierProduct;
         }
+        #endregion
         
-        // --- Helpers ---
+        // --- HELPERS METHODS ---
+        #region Helpers
+        /// <summary>
+        /// Parses a string to a float value.
+        /// If the string cannot be parsed, returns 0.0f.
+        /// </summary>
+        /// <param name="value">The string representation of the float value to parse.</param>
+        /// <returns>The parsed float value, or 0.0f if parsing fails.</returns>
         private static float ParseFloat(string value)
         {
             // Tries to parse. If it fails (bad text), returns 0.0f
@@ -236,6 +276,11 @@ namespace WeaponCreation
             return 0.0f; 
         }
 
+        /// <summary>
+        /// Parses a string value into an integer. If parsing fails, it returns a default value of 1.
+        /// </summary>
+        /// <param name="value">The string value to be parsed into an integer.</param>
+        /// <returns>The parsed integer value. Returns 1 if the parsing fails.</returns>
         private static int ParseInt(string value)
         {
             if (int.TryParse(value.Trim(), out int result))
@@ -243,25 +288,44 @@ namespace WeaponCreation
             return 1; // Default level 1 if parsing fails
         }
 
+        /// <summary>
+        /// Used to parse Enums from string values in CSV.
+        /// </summary>
+        /// <param name="value">The collum of the data that you want to parse.</param>
+        /// <typeparam name="T"></typeparam>
+        /// <returns>Returns the data, if not returns the first enum item if fails.</returns>
         private static T ParseEnum<T>(string value) where T : struct
         {
             if (Enum.TryParse<T>(value.Trim(), true, out T result))
-                return result;
+                return result; 
             return default(T); // Returns first enum item (e.g. Sword or Common) if fails
         }
 
+        /// <summary>
+        /// Gets the weapon info as a formatted string.
+        /// </summary>
+        /// <returns></returns>
         public override string ToString()
         {
-            return $"[{Id}] {Name} {Level} ({RarityType} {Type}) | DMG: {ActualDamage:F0} | ELM: {Element} | VAL: {CalculateSalePrice()}g";
+            return $"[{Id}] {Name} {Level} ({RarityType} {Type}) | DMG: {ActualDamage:F0} | ELM: {Element} | VAL: {CalculateSalePrice()}g, SELL: {CalculateSellPrice()}g{GetBonusStatsString()}";
         }
         
-        public string GetBonusStatsString()
+        /// <summary>
+        /// Gets a formatted string of the bonus stats.
+        /// </summary>
+        /// <returns>Returns the Stats to String.</returns>
+        private string GetBonusStatsString()
         {
             if (BonusStats.Count == 0) return "";
             return " | Bonus: " + string.Join(", ", BonusStats);
         }
-
+        #endregion
+        
         #if DEBUG
+        /// <summary>
+        /// Attack Loop for testing damage and crit rates.
+        /// </summary>
+        /// <param name="loops">How many loops do you need.</param>
         public void AttackLoop(int loops)
         {
             Console.WriteLine($"--- Simulating {loops} attacks for {Name} ---");
@@ -274,12 +338,17 @@ namespace WeaponCreation
             }
             Console.WriteLine($"Results: {loops} Hits. {crits} Crits. Est. Value: {CalculateSalePrice()}");
         }
+        #endif
         
-        #region Stat Rolling for Weapons (Debug Only)
-        private static Random _rng = new Random();
-
-        // Rolls random stats for a weapon based on its rarity
-        // Going to change... this to a more robust system later.
+        #region Stat Rolling for Weapons
+        // Simple RNG for stat rolling
+        private static Random _rng = new Random(); 
+        
+        /// <summary>
+        /// Rolls random stats for the weapon based on its Rarity.
+        /// Common = 0 stats, Uncommon = 1 stat, Rare = 2 stats, Epic = 3 stats, Legendary = 4 stats.
+        /// </summary>
+        /// <param name="weapon">Weapon that is rolling stats.</param>
         public static void RollStatsForWeapon(Weapon weapon)
         {
             // Determine how many stats based on Rarity?
@@ -289,7 +358,7 @@ namespace WeaponCreation
                 Rarity.Uncommon => 1,
                 Rarity.Rare => 2,
                 Rarity.Epic => 3,
-                Rarity.Legendary => 10,
+                Rarity.Legendary => 4,
                 _ => 0
             };
 
@@ -298,38 +367,43 @@ namespace WeaponCreation
                 weapon.BonusStats.Add(GenerateRandomStat());
             }
         }
-
-        // Going to change this to a more robust system later.
-        private static WeaponDropStats GenerateRandomStat()
+        
+        /// <summary>
+        /// This is the stats to be rolled for the weapon.
+        /// Add more stats as needed.
+        /// </summary>
+        /// <returns>Stats to be rolled.</returns>
+        private static WeaponPrefixStats GenerateRandomStat()
         {
             // Pick Random Stat (Health or Damage)
-            var stats = Enum.GetValues<WeaponDropStats.StatType>();
+            var stats = Enum.GetValues<WeaponPrefixStats.StatType>();
             var statType = stats[_rng.Next(stats.Length)];
 
             // Pick Random Modifier (Flat, %, etc)
-            var mods = Enum.GetValues<WeaponDropStats.ModifierType>();
+            var mods = Enum.GetValues<WeaponPrefixStats.ModifierType>();
             var modType = mods[_rng.Next(mods.Length)];
 
-            float value = 0f;
+            float flatValue = 0f;
+            float minPercent = 0.2f, maxPercent = 0.5f;
+            float minMult = 1.1f, maxMult = 1.5f;
             
-            if (modType == WeaponDropStats.ModifierType.Flat)
+            if (modType == WeaponPrefixStats.ModifierType.Flat)
             {
-                if (statType == WeaponDropStats.StatType.MaxHealth) value = _rng.Next(10, 50); // +10 to +50 HP
-                else value = _rng.Next(2, 10); // +2 to +10 Dmg
+                if (statType == WeaponPrefixStats.StatType.MaxHealth) flatValue = _rng.Next(10, 50); // +10 to +50 HP
+                if (statType == WeaponPrefixStats.StatType.AttackDamage) flatValue = _rng.Next(20, 20); // +2 to +10 DMG
             }
-            else if (modType == WeaponDropStats.ModifierType.PercentageAdd)
+            else if (modType == WeaponPrefixStats.ModifierType.PercentageAdd)
             {
-                value = (float)_rng.NextDouble() * 0.2f; // 0% to 20%
+                flatValue = minPercent + ((float)_rng.NextDouble() * (maxPercent - minPercent)); // 20% to 50% based on the minPercent/maxPercent
 
             }
             else // Multiplier
             {
-                value = 1.0f + ((float)_rng.NextDouble() * 0.5f); // 1.0x to 1.5x
+                flatValue = minMult + ((float)_rng.NextDouble() * (maxMult - minMult)); // 1.0x to 1.5x based on the minMult/maxMult
             }
 
-            return new WeaponDropStats(statType, modType, value);
+            return new WeaponPrefixStats(statType, modType, flatValue);
         }
         #endregion
-        #endif
     }
 }
