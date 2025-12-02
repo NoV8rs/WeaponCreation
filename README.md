@@ -215,7 +215,7 @@ private Weapon(
 | `Level` | int | Current level of the weapon |
 | `GrowthRatePerLevel` | float | Damage scaling factor per level |
 | `ActualDamage` | float | Damage after applying rarity, level scaling (cached) |
-| `BonusStats` | List\<WeaponPrefixStats\> | List of bonus stats applied to the weapon |
+| `BonusStats` | List&lt;WeaponPrefixStats&gt; | List of bonus stats applied to the weapon |
 | `Range` | float | Range of the weapon (may be removed later) |
 | `Weight` | float | Weight of the weapon (may be removed later) |
 
