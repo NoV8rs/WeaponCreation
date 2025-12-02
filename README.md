@@ -8,10 +8,11 @@ The **WeaponCreation** namespace provides a flexible, framework-independent weap
 ## Table of Contents
 - [Features](#features)
 - [Quick Start / Usage](#quick-start--usage)
-  - [Basic Weapon Creation](#basic-weapon-creation)
-  - [Elemental Weapon](#elemental-weapon)
+  - [Loading Weapons from CSV](#loading-weapons-from-csv)
+  - [Accessing and Using Individual Weapons](#accessing-and-using-individual-weapons)
+  - [Creating Weapon Copies at Different Levels](#creating-weapon-copies-at-different-levels)
+  - [Rolling Random Stats for Weapons](#rolling-random-stats-for-weapons)
   - [Testing Weapon in Debug Mode](#testing-weapon-in-debug-mode)
-  - [Configuring Attack Speed](#configuring-attack-speed)
 - [System Mechanics](#system-mechanics)
   - [Damage System](#damage-system)
   - [Rarity Multipliers](#rarity-multipliers)
@@ -25,6 +26,7 @@ The **WeaponCreation** namespace provides a flexible, framework-independent weap
     - [WeaponType](#weapontype)
     - [Rarity](#rarity)
     - [WeaponElement](#weaponelement)
+  - [WeaponPrefixStats Class](#weaponprefixstats-class)
 - [Architecture & Design](#architecture--design)
   - [Framework Independence](#framework-independence)
   - [Random Number Generation](#random-number-generation)
@@ -416,9 +418,10 @@ Uses `Random.Shared` (available in .NET 6+) for thread-safe random number genera
 ### Design Patterns Used
 
 1. **Primary Constructor**: Modern C# 12+ primary constructor syntax
-2. **Static Factory Method**: `CreateWeapon()` provides clear weapon creation
-3. **Strategy Pattern**: Rarity modifiers using switch expressions
-4. **Encapsulation**: Private implementation details with public interface
+2. **CSV Data Loading Pattern**: Weapons are loaded from external data files for easy balancing
+3. **Static Factory Method**: `LoadWeaponsFromCsv()` provides centralized weapon creation
+4. **Strategy Pattern**: Rarity modifiers using switch expressions
+5. **Encapsulation**: Private constructor and implementation details with public interface
 
 ### Integration with Other Systems
 
@@ -426,20 +429,15 @@ Uses `Random.Shared` (available in .NET 6+) for thread-safe random number genera
 The `WeaponElement` enum integrates with the enemy system to apply weakness multipliers:
 
 ```csharp
-// Create a fire-element weapon
-var flamingSword = Weapon.CreateWeapon(
-    name: "Flaming Blade",
-    type: WeaponType.Sword,
-    rarity: Rarity.Rare,
-    damage: 80f,
-    critChance: 0.15f,
-    critMult: 2.0f,
-    weight: 5f,
-    element: WeaponElement.Fire
-);
+// Load weapons from CSV
+var weapons = Weapon.LoadWeaponsFromCsv("weapons.csv");
+
+// Get a fire-element weapon
+var flameAxe = weapons.First(w => w.Element == WeaponElement.Fire);
 
 // Enemy weak to fire takes bonus damage
 // See Enemies.cs TakeDamage() method for implementation
+Console.WriteLine($"{flameAxe.Name} deals {flameAxe.Element} damage");
 ```
 
 ---
