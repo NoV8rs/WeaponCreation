@@ -1,4 +1,6 @@
-﻿namespace WeaponCreation;
+﻿using System;
+
+namespace WeaponCreation;
 
 /// <summary>
 /// A class for defining weapon prefix stats and their modifiers.
@@ -22,12 +24,64 @@ public class WeaponPrefixStats
     {
         MaxHealth,
         AttackDamage,
+        CriticalChance,
+        CriticalDamage,
     }
     
     // Properties
     public StatType statType { get; set; }
     public ModifierType modifierType { get; set; }
     public float value { get; set; }
+    
+    private sealed record ModifierRule(ModifierType Type, Func<float, float> NormalizeValue);
+
+    private static readonly Dictionary<StatType, List<ModifierRule>> _statModifierRules = new()
+    {
+        {
+            StatType.MaxHealth,
+            new()
+            {
+                new ModifierRule(ModifierType.Flat, value => MathF.Max(0f, value)),
+                new ModifierRule(ModifierType.PercentageAdd, value => Math.Clamp(value, -0.5f, 0.75f))
+            }
+        },
+        {
+            StatType.AttackDamage,
+            new()
+            {
+                new ModifierRule(ModifierType.Flat, value => value),
+                new ModifierRule(ModifierType.PercentageAdd, value => Math.Clamp(value, 0.5f, 1.0f)),
+                new ModifierRule(ModifierType.Multiplier, value => Math.Clamp(value <= 1.0f ? 1.1f : value, 1.1f, 3.0f))
+            }
+        },
+        {
+            StatType.CriticalChance,
+            new()
+            {
+                new ModifierRule(ModifierType.Flat, value => Math.Clamp(value / 100f, 0.05f, 0.25f)),
+                new ModifierRule(ModifierType.PercentageAdd, value => Math.Clamp(value / 100f, 0.25f, 0.5f))
+            }
+        },
+        {
+            StatType.CriticalDamage,
+            new()
+            {
+                new ModifierRule(ModifierType.Flat, value => Math.Clamp(value, 0.2f, 1.0f)),
+                new ModifierRule(ModifierType.PercentageAdd, value => Math.Clamp(value, 0.25f, 0.75f)),
+                new ModifierRule(ModifierType.Multiplier, value => Math.Clamp(value <= 1.0f ? 1.25f : value, 1.25f, 4.0f))
+            }
+        }
+    };
+
+    private static ModifierRule ResolveModifierRule(StatType statType, ModifierType requested)
+    {
+        if (!_statModifierRules.TryGetValue(statType, out var rules) || rules.Count == 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(statType), $"Stat type '{statType}' is not configured for prefix modifiers.");
+        }
+
+        return rules.FirstOrDefault(rule => rule.Type == requested) ?? rules[0];
+    }
     
     /// <summary>
     /// Weapon Prefix Stats Constructor
@@ -38,13 +92,9 @@ public class WeaponPrefixStats
     public WeaponPrefixStats(StatType statType, ModifierType modifierType, float value)
     {
         this.statType = statType;
-        this.modifierType = modifierType;
-        this.value = value;
-        
-        if (modifierType == ModifierType.Multiplier)
-        {
-            this.value = Math.Clamp(value, 1.1f, 2.0f);
-        }
+        var rule = ResolveModifierRule(statType, modifierType);
+        this.modifierType = rule.Type;
+        this.value = rule.NormalizeValue(value);
     }
     
     /// <summary>
@@ -53,14 +103,13 @@ public class WeaponPrefixStats
     /// <returns></returns>
     public override string ToString()
     {
-        // Rounded to the nearest tenth for display
-        float roundedValue = MathF.Round(value, 1);
-        float roundedPercent = MathF.Round(value * 100f, 1);
+        float roundedValue = MathF.Round(value, 2);
+        float roundedPercent = MathF.Round(value * 100f, 2);
 
         return modifierType switch
         {
-            ModifierType.Flat => $"+{roundedValue} {statType}",
-            ModifierType.PercentageAdd => $"+{roundedPercent}% {statType}",
+            ModifierType.Flat => $"+ {roundedValue} {statType}",
+            ModifierType.PercentageAdd => $"+ {roundedPercent}% {statType}",
             ModifierType.Multiplier => $"{roundedValue}x {statType}",
             _ => "Unknown Modifier"
         };

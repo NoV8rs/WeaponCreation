@@ -1,7 +1,7 @@
 ﻿ID,Name,Type,Rarity,BaseDamage,Range,Weight,CritChance,CritMult,Element,GrowthRate,Level
 W001,Iron Sword,Sword,Common,10,1.5,5.0,0.1,2.0,None,1.1,50
 W002,Flame Axe,Axe,Legendary,25,1.2,12.0,0.15,2.5,Fire,1.11,5
-W003,Frost Bow,Bow,Epic,18,15.0,3.5,1.25,3.0,Ice,1.12,10
+W003,Frost Bow,Bow,Epic,18,15.0,3.5,0.25,3.0,Ice,1.12,10
 W004,Thunder Spear,Sword,Legendary,30,2.0,8.0,1.5,2.8,Lightning,1.15,50
 W005,Shadow Dagger,Bow,Common,12,1.0,2.0,0.3,3.5,Fire,1.1,1
 W006,Earth Hammer,Hammer,Rare,28,1.0,20.0,1.1,2.2,Earth,1.15,7

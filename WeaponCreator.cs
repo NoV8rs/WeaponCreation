@@ -33,7 +33,7 @@ namespace WeaponCreation
         // Critical Chance (e.g., 0.15 = 15% chance)
         public float CriticalChance { get; set; }
         // Critical Multiplier (e.g., 1.5 = 50% more damage on crit)
-        public float CriticalMultiplier { get; set; }
+        public float CriticalDamage { get; set; }
         // Attack Speed (Attacks per Second)
         public float AttackSpeedPerSecond { get; set; } = 1.0f;
 
@@ -53,7 +53,7 @@ namespace WeaponCreation
             {
                 if (_cachedDamage < 0)
                 {
-                    _cachedDamage = BaseDamage * GetDamageModifier(RarityType) * GetDamageFromLevel(Level, GrowthRatePerLevel);
+                    _cachedDamage = CalculateFinalDamage();
                 }
                 return _cachedDamage;
             }
@@ -91,7 +91,7 @@ namespace WeaponCreation
             Range = range;
             Weight = weight;
             CriticalChance = critChance;
-            CriticalMultiplier = critMult;
+            CriticalDamage = critMult;
             Element = element;
             Level = level;
             GrowthRatePerLevel = growthPerLevel;
@@ -178,7 +178,7 @@ namespace WeaponCreation
         {
             var newWeapon = new Weapon(
                 this.Id, this.Name, this.Type, this.RarityType, this.BaseDamage,
-                this.Range, this.Weight, this.CriticalChance, this.CriticalMultiplier,
+                this.Range, this.Weight, this.CriticalChance, this.CriticalDamage,
                 this.Element, this.GrowthRatePerLevel, targetLevel
             );
 
@@ -234,36 +234,70 @@ namespace WeaponCreation
             int damage = Random.Shared.Next((int)MinDamage, (int)MaxDamage + 1);
             if (Random.Shared.NextDouble() < CriticalChance)
             {
-                damage = (int)(damage * CriticalMultiplier);
+                damage = (int)(damage * CriticalDamage);
             }
             return damage;
         }
         
-        public float CalculateBonusStat(WeaponPrefixStats.StatType statToCalc, float playerBaseValue)
+        public float GetEffectiveStat(float baseValue, WeaponPrefixStats.StatType typeToCheck)
         {
-            float flatSum = 0;
-            float percentSum = 0;
-            float multiplierProduct = 1;
+            float total = baseValue;
 
-            // Find only modifiers that affect the requested stat (e.g., MaxHealth)
-            foreach (var mod in BonusStats.Where(m => m.statType == statToCalc))
+            // Filter the list once for the stats we care about
+            var relevantStats = BonusStats.Where(s => s.statType == typeToCheck).ToList();
+
+            // 1. Apply Flat Modifiers (e.g., +5 Damage)
+            // It's usually best to add flat values before multiplying percentages
+            float flatSum = relevantStats
+                .Where(s => s.modifierType == WeaponPrefixStats.ModifierType.Flat)
+                .Sum(s => s.value);
+    
+            total += flatSum;
+
+            // 2. Apply Percentage Additive (e.g., +10% Damage + 20% Damage = +30% Total)
+            float percentSum = relevantStats
+                .Where(s => s.modifierType == WeaponPrefixStats.ModifierType.PercentageAdd)
+                .Sum(s => s.value);
+    
+            if (percentSum != 0)
             {
-                switch (mod.modifierType)
-                {
-                    case WeaponPrefixStats.ModifierType.Flat:
-                        flatSum += mod.value;
-                        break;
-                    case WeaponPrefixStats.ModifierType.PercentageAdd:
-                        percentSum += mod.value;
-                        break;
-                    case WeaponPrefixStats.ModifierType.Multiplier:
-                        multiplierProduct *= mod.value;
-                        break;
-                }
+                total *= (1.0f + percentSum);
             }
 
-            // Formula: (Base + Flat) * (1 + Sum%) * (ProductX)
-            return (playerBaseValue + flatSum) * (1.0f + percentSum) * multiplierProduct;
+            // 3. Apply Multipliers (e.g., Double Damage)
+            var multipliers = relevantStats
+                .Where(s => s.modifierType == WeaponPrefixStats.ModifierType.Multiplier);
+        
+            foreach (var stat in multipliers)
+            {
+                total *= stat.value;
+            }
+
+            return total;
+        }
+        
+        public float CalculateFinalDamage()
+        {
+            // Step A: Calculate the Stat (Base + Prefixes)
+            float effectiveBaseDamage = GetEffectiveStat(this.BaseDamage, WeaponPrefixStats.StatType.AttackDamage);
+            
+            // Step B: Get Scaling Multipliers
+            // Note: Assuming these methods exist in your class based on your previous code
+            float rarityMod = GetDamageModifier(this.RarityType); 
+            float levelMod = GetDamageFromLevel(this.Level, this.GrowthRatePerLevel);
+
+            // Step C: Calculate Final
+            return effectiveBaseDamage * rarityMod * levelMod;
+        }
+        
+        public float CalculateFinalCriticalChance()
+        {
+            return GetEffectiveStat(this.CriticalChance, WeaponPrefixStats.StatType.CriticalChance);
+        }
+
+        public float CalculateFinalCriticalDamage()
+        {
+            return GetEffectiveStat(this.CriticalDamage, WeaponPrefixStats.StatType.CriticalDamage);
         }
         #endregion
         
@@ -314,7 +348,7 @@ namespace WeaponCreation
         /// <returns></returns>
         public override string ToString()
         {
-            return $"[{Id}] {Name} {Level} ({RarityType} {Type}) | DMG: {ActualDamage:F0} | ELM: {Element} | VAL: {CalculateSalePrice()}g, SELL: {CalculateSellPrice()}g{GetBonusStatsString()}";
+            return $"[{Id}] {Name} {Level} ({RarityType} {Type}) | DMG: {BaseDamage:F0} | ELM: {Element} | VAL: {CalculateSalePrice()}g, SELL: {CalculateSellPrice()}g{GetBonusStatsString()}";
         }
         
         /// <summary>
@@ -330,7 +364,7 @@ namespace WeaponCreation
         /// <summary>
         /// Gives the weapon a name based on its prefixes.
         /// </summary>
-        private void UpdateNameWithPrefixes()
+        public void UpdateNameWithPrefixes()
         {
             // 1. Reset name to original so we don't get "Sharp Sharp Sword"
             string prefix = "";
@@ -358,24 +392,6 @@ namespace WeaponCreation
         }
         
         /// <summary>
-        /// IF you want to combine multiple prefixes into the name.
-        /// E.g., "Sharp Vital Sword" for +Damage and +Health.
-        /// </summary>
-        /// <returns></returns>
-        //private void UpdateNameWithPrefixes()
-        //{
-        //    StringBuilder fullPrefix = new StringBuilder();
-
-        //    foreach (var stat in BonusStats)
-        //    {
-        //        fullPrefix.Append(GetAdjectiveForStat(stat) + " ");
-        //    }
-
-        //    // TrimEnd removes the trailing space
-        //    Name = $"{fullPrefix.ToString().TrimEnd()} {_originalName}";
-        //}
-
-        /// <summary>
         /// Get the adjective based on the stat type and modifier.
         /// </summary>
         /// <param name="stat">Gets the stat for the adjective name for the weapon.</param>
@@ -388,7 +404,7 @@ namespace WeaponCreation
                 {
                     WeaponPrefixStats.ModifierType.Multiplier => "Deadly",
                     WeaponPrefixStats.ModifierType.PercentageAdd => "Jagged",
-                    _ => "Sharp" // Flat damage
+                    _ => "Sharp"
                 },
         
                 WeaponPrefixStats.StatType.MaxHealth => stat.modifierType switch
@@ -396,6 +412,20 @@ namespace WeaponCreation
                     WeaponPrefixStats.ModifierType.Multiplier => "Immortal",
                     WeaponPrefixStats.ModifierType.PercentageAdd => "Vital",
                     _ => "Sturdy"
+                },
+                
+                WeaponPrefixStats.StatType.CriticalChance => stat.modifierType switch
+                {
+                    WeaponPrefixStats.ModifierType.Multiplier => "Assassin's",
+                    WeaponPrefixStats.ModifierType.PercentageAdd => "Keen",
+                    _ => "Precise"
+                },
+                
+                WeaponPrefixStats.StatType.CriticalDamage => stat.modifierType switch
+                {
+                    WeaponPrefixStats.ModifierType.Multiplier => "Brutal",
+                    WeaponPrefixStats.ModifierType.PercentageAdd => "Fierce",
+                    _ => "Powerful"
                 },
         
                 _ => "Enchanted" // Fallback
@@ -421,73 +451,51 @@ namespace WeaponCreation
             Console.WriteLine($"Results: {loops} Hits. {crits} Crits. Est. Value: {CalculateSalePrice()}");
         }
         #endif
-        
-        #region Stat Rolling for Weapons
-        // Simple RNG for stat rolling
-        private static Random _rng = new Random(); 
-        
+
+        #region Testing Methods
+
         /// <summary>
-        /// Rolls random stats for the weapon based on its Rarity.
-        /// Common = 0 stats, Uncommon = 1 stat, Rare = 2 stats, Epic = 3 stats, Legendary = 4 stats.
-        /// </summary>
-        /// <param name="weapon">Weapon that is rolling stats.</param>
-        public static void RollStatsForWeapon(Weapon weapon)
+
+        public void TestWeaponCalculations(Weapon weapon)
         {
-            // Determine how many stats based on Rarity?
-            int rollCount = weapon.RarityType switch
-            {
-                Rarity.Common => 0,
-                Rarity.Uncommon => 1,
-                Rarity.Rare => 2,
-                Rarity.Epic => 3,
-                Rarity.Legendary => 4,
-                _ => 0
-            };
-
-            for (int i = 0; i < rollCount; i++)
-            {
-                weapon.BonusStats.Add(GenerateRandomStat());
-            }
+            Console.WriteLine($"--- Testing Weapon: {weapon.Name} ---");
+            Console.WriteLine($"Base Damage: {weapon.BaseDamage}");
             
-            weapon.UpdateNameWithPrefixes();
-        }
-        
-        /// <summary>
-        /// This is the stats to be rolled for the weapon.
-        /// Add more stats as needed.
-        /// </summary>
-        /// <returns>Stats to be rolled.</returns>
-        private static WeaponPrefixStats GenerateRandomStat()
-        {
-            // Pick Random Stat (Health or Damage)
-            var stats = Enum.GetValues<WeaponPrefixStats.StatType>();
-            var statType = stats[_rng.Next(stats.Length)];
-
-            // Pick Random Modifier (Flat, %, etc)
-            var mods = Enum.GetValues<WeaponPrefixStats.ModifierType>();
-            var modType = mods[_rng.Next(mods.Length)];
-
-            float flatValue = 0f;
-            float minPercent = 0.2f, maxPercent = 0.5f;
-            float minMult = 1.1f, maxMult = 1.5f;
+            // Calculate level scaling
+            float levelMod = GetDamageFromLevel(weapon.Level, weapon.GrowthRatePerLevel);
+            Console.WriteLine($"Level Modifier ({weapon.Level}): {levelMod:F2}x");
             
-            if (modType == WeaponPrefixStats.ModifierType.Flat)
+            // Calculate rarity scaling
+            float rarityMod = GetDamageModifier(weapon.RarityType);
+            Console.WriteLine($"Rarity Modifier ({weapon.RarityType}): {rarityMod:F2}x");
+            
+            // Calculate effective base damage with prefixes
+            float effectiveBaseDamage = weapon.GetEffectiveStat(weapon.BaseDamage, WeaponPrefixStats.StatType.AttackDamage);
+            Console.WriteLine($"Effective Base Damage (with prefixes):{weapon.BaseDamage} + {(float)WeaponPrefixStats.StatType.AttackDamage} = {effectiveBaseDamage:F2}");
+            
+            // Calculate final damage
+            float finalDamage = effectiveBaseDamage * rarityMod * levelMod;
+            Console.WriteLine($"Final Damage Calculation: {effectiveBaseDamage:F2} * {rarityMod:F2} * {levelMod:F2} = {finalDamage:F2}");
+            Console.WriteLine($"Actual Damage (cached): {weapon.ActualDamage:F2}");
+            
+            float effectiveCritChance = weapon.GetEffectiveStat(weapon.CriticalChance, WeaponPrefixStats.StatType.CriticalChance);
+            Console.WriteLine($"Effective Critical Chance: {weapon.CriticalChance:P2} -> {effectiveCritChance:P2}");
+            float effectiveCritDamage = weapon.GetEffectiveStat(weapon.CriticalDamage, WeaponPrefixStats.StatType.CriticalDamage);
+            Console.WriteLine($"Effective Critical Damage: {weapon.CriticalDamage:F2}x -> {effectiveCritDamage:F2}x");
+            
+            // Price calculations
+            int salePrice = weapon.CalculateSalePrice();
+            int sellPrice = weapon.CalculateSellPrice();
+            Console.WriteLine($"Sale Price: {salePrice}g, Sell Price: {sellPrice}g");
+            
+            Console.WriteLine("Bonus Stats:");
+            foreach (var stat in weapon.BonusStats)
             {
-                if (statType == WeaponPrefixStats.StatType.MaxHealth) flatValue = _rng.Next(10, 50); // +10 to +50 HP
-                else if (statType == WeaponPrefixStats.StatType.AttackDamage) flatValue = _rng.Next(20, 20); // +2 to +10 DMG
+                Console.WriteLine($"- {stat}");
             }
-            else if (modType == WeaponPrefixStats.ModifierType.PercentageAdd)
-            {
-                flatValue = minPercent + ((float)_rng.NextDouble() * (maxPercent - minPercent)); // 20% to 50% based on the minPercent/maxPercent
-
-            }
-            else // Multiplier
-            {
-                flatValue = minMult + ((float)_rng.NextDouble() * (maxMult - minMult)); // 1.0x to 1.5x based on the minMult/maxMult
-            }
-
-            return new WeaponPrefixStats(statType, modType, flatValue);
+            Console.WriteLine("---------------------------");
         }
+
         #endregion
     }
 }
