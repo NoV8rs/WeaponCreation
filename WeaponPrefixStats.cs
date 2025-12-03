@@ -32,9 +32,16 @@ public class WeaponPrefixStats
     public StatType statType { get; set; }
     public ModifierType modifierType { get; set; }
     public float value { get; set; }
-    
+
+
+    /// <summary>
+    /// Represents a rule that defines how a modifier is applied and normalized for a given stat type.
+    /// </summary>
     private sealed record ModifierRule(ModifierType Type, Func<float, float> NormalizeValue);
 
+    /// <summary>
+    /// Values ranges for each stat type and modifier combination.
+    /// </summary>
     private static readonly Dictionary<(StatType Stat, ModifierType Modifier), (float Min, float Max)> _statValueRanges = new()
     {
         {(StatType.MaxHealth, ModifierType.Flat), (10f, 100f)},
@@ -55,38 +62,39 @@ public class WeaponPrefixStats
     /// </summary>
     private static readonly Dictionary<StatType, List<ModifierRule>> _statModifierRules = new()
     {
+        // This code rounds the values to the nearest hundredth for each stat type and modifier combination.
         {
             StatType.MaxHealth,
             new()
             {
-                new ModifierRule(ModifierType.Flat, value => MathF.Max(0f, value)),
-                new ModifierRule(ModifierType.PercentageAdd, value => Math.Clamp(value, 0.5f, 0.75f))
+                new ModifierRule(ModifierType.Flat, value => MathF.Round(value, 2)),
+                new ModifierRule(ModifierType.PercentageAdd, value => MathF.Round(value, 2))
             }
         },
         {
             StatType.AttackDamage,
             new()
             {
-                new ModifierRule(ModifierType.Flat, value => value),
-                new ModifierRule(ModifierType.PercentageAdd, value => Math.Clamp(value, 0.5f, 1.0f)),
-                new ModifierRule(ModifierType.Multiplier, value => Math.Clamp(value <= 1.0f ? 1.1f : value, 1.1f, 3.0f))
+                new ModifierRule(ModifierType.Flat, value => MathF.Round(value, 2)),
+                new ModifierRule(ModifierType.PercentageAdd, value => MathF.Round(value, 2)),
+                new ModifierRule(ModifierType.Multiplier, value => MathF.Round(value <= 1.0f ? 1.1f : value, 2))
             }
         },
         {
             StatType.CriticalChance,
             new()
             {
-                new ModifierRule(ModifierType.Flat, value => Math.Clamp(value / 100f, 0.05f, 0.25f)),
-                new ModifierRule(ModifierType.PercentageAdd, value => Math.Clamp(value / 100f, 0.25f, 0.5f))
+                new ModifierRule(ModifierType.Flat, value => MathF.Round(value, 2)),
+                new ModifierRule(ModifierType.PercentageAdd, value => MathF.Round(value, 2))
             }
         },
         {
             StatType.CriticalDamage,
             new()
             {
-                new ModifierRule(ModifierType.Flat, value => Math.Clamp(value, 0.2f, 1.0f)),
-                new ModifierRule(ModifierType.PercentageAdd, value => Math.Clamp(value, 0.25f, 0.75f)),
-                new ModifierRule(ModifierType.Multiplier, value => Math.Clamp(value <= 1.0f ? 1.25f : value, 1.25f, 4.0f))
+                new ModifierRule(ModifierType.Flat, value => MathF.Round(value, 2)),
+                new ModifierRule(ModifierType.PercentageAdd, value => MathF.Round(value, 2)),
+                new ModifierRule(ModifierType.Multiplier, value => MathF.Round(value <= 1.0f ? 1.25f : value, 2))
             }
         }
     };
@@ -144,6 +152,11 @@ public class WeaponPrefixStats
     {
         float roundedValue = MathF.Round(value, 2);
         float roundedPercent = MathF.Round(value * 100f, 2);
+        
+        if (statType == StatType.CriticalChance && modifierType == ModifierType.Flat)
+        {
+            return $"+ {roundedPercent:F}% {statType}";
+        }
 
         return modifierType switch
         {
@@ -153,4 +166,17 @@ public class WeaponPrefixStats
             _ => "Unknown Modifier"
         };
     }
+
+    #region TestingHelpers
+
+    /// <summary>
+    /// Testing helper to print min and max values for the stat and modifier.
+    /// </summary>
+    public void PrintModifierMinMax()
+    {
+        var (min, max) = GetRange(statType, modifierType);
+        Console.WriteLine($"Stat: {statType}, Modifier: {modifierType}, Value: {value:F} , Min: {min}, Max: {max}");
+    }
+
+    #endregion
 }
